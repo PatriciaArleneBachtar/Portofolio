@@ -1,0 +1,65 @@
+Nama 	: Patricia Arlene Bachtar
+NIM	: 00000110769
+
+
+## Melihat Jumlah Rows
+SELECT COUNT(*) AS total_rows
+FROM `is429labmidterm.grow_sync_data.grow_sync_data`;
+
+## Cek Missing Value
+SELECT
+  COUNT(*) AS total_rows,
+  COUNTIF(temperature IS NULL) AS missing_temperature,
+  COUNTIF(humidity IS NULL) AS missing_humidity,
+  COUNTIF(ph IS NULL) AS missing_ph,
+  COUNTIF(rainfall IS NULL) AS missing_rainfall,
+  COUNTIF(label IS NULL) AS missing_label
+FROM `is429labmidterm.grow_sync_data.grow_sync_data`;
+
+
+## Buat Tabel baru yang udah Clean
+CREATE OR REPLACE TABLE `is429labmidterm.grow_sync_data.crop_cleaned` AS
+SELECT *
+FROM `is429labmidterm.grow_sync_data.grow_sync_data`
+WHERE temperature BETWEEN 5 AND 50
+  AND humidity BETWEEN 0 AND 100
+  AND rainfall >= 0;
+
+
+## EDA 
+SELECT
+  AVG(temperature) AS avg_temp,
+  AVG(humidity) AS avg_humidity,
+  AVG(ph) AS avg_ph,
+  AVG(rainfall) AS avg_rainfall
+FROM `is429labmidterm.grow_sync_data.crop_cleaned`;
+
+
+SELECT
+  label AS crop,
+  COUNT(*) AS total
+FROM `is429labmidterm.grow_sync_data.crop_cleaned`
+GROUP BY crop
+ORDER BY total DESC;
+
+
+## MODELING
+CREATE OR REPLACE MODEL `is429labmidterm.grow_sync_data.crop_model`
+OPTIONS(model_type='logistic_reg', input_label_cols=['label']) AS
+SELECT
+  N, P, K,
+  temperature,
+  humidity,
+  ph,
+  rainfall,
+  label
+FROM `is429labmidterm.grow_sync_data.crop_cleaned`;
+
+
+SELECT *
+FROM ML.PREDICT(
+  MODEL `is429labmidterm.grow_sync_data.crop_model`,
+  (SELECT * FROM `is429labmidterm.grow_sync_data.crop_cleaned` LIMIT 10)
+);
+
+
