@@ -1,0 +1,553 @@
+Nama	: Patricia arlene
+NIM	: 00000110769
+
+
+proc import
+    datafile="/home/u64450917/Advancebda/BankChurners.csv"
+    out=bankchurn
+    dbms=csv
+    replace;
+    guessingrows=max;
+run;
+
+
+proc contents data=bankchurn;
+run;
+
+proc print data=bankchurn(obs=10);
+run;
+
+proc means data=bankchurn n nmiss mean median min max std;
+run;
+
+proc freq data=bankchurn;
+tables
+Attrition_Flag
+Gender
+Income_Category
+Card_Category;
+run;
+
+
+proc sort
+    data=bankchurn
+    out=bankchurn_nodup
+    nodupkey;
+by CLIENTNUM;
+run;
+
+
+data bankchurn_feature;
+set bankchurn_nodup;
+
+length Inactive_Risk $20;
+length Utilization_Group $20;
+length Transaction_Level $20;
+length Customer_Value $20;
+
+
+
+if Months_Inactive_12_mon >= 3 then
+    Inactive_Risk="High";
+else
+    Inactive_Risk="Low";
+
+
+
+if Avg_Utilization_Ratio >= 0.50 then
+    Utilization_Group="High";
+else
+    Utilization_Group="Low";
+
+
+
+if Total_Trans_Ct >= 60 then
+    Transaction_Level="High";
+else
+    Transaction_Level="Low";
+
+
+
+if Total_Trans_Amt >= 5000 then
+    Customer_Value="High";
+else
+    Customer_Value="Normal";
+
+run;
+
+
+proc freq data=bankchurn_feature;
+tables
+Attrition_Flag
+Card_Category*Attrition_Flag
+Income_Category*Attrition_Flag;
+run;
+
+
+proc logistic data=bankchurn_feature;
+
+class
+Gender
+Income_Category
+Card_Category
+Marital_Status
+Education_Level
+/ param=ref;
+
+model Attrition_Flag(event='Attrited Customer') =
+
+Customer_Age
+Months_on_book
+Total_Relationship_Count
+Months_Inactive_12_mon
+Contacts_Count_12_mon
+Credit_Limit
+Total_Revolving_Bal
+Total_Trans_Amt
+Total_Trans_Ct
+Avg_Utilization_Ratio;
+
+output
+out=predicted
+p=ChurnProbability;
+
+run;
+
+
+
+data churn_scored;
+set predicted;
+
+length Churn_Risk $20;
+
+if ChurnProbability >= 0.70 then
+    Churn_Risk="High Risk";
+
+else if ChurnProbability >= 0.40 then
+    Churn_Risk="Medium Risk";
+
+else
+    Churn_Risk="Low Risk";
+
+run;
+
+
+data recommendation_data;
+set churn_scored;
+
+length Recommendation $50;
+
+if Churn_Risk="High Risk" then
+    Recommendation="Retention Campaign";
+
+else if Customer_Value="High"
+and Utilization_Group="Low" then
+    Recommendation="Credit Limit Upgrade";
+
+else if Inactive_Risk="High" then
+    Recommendation="Customer Re-engagement";
+
+else
+    Recommendation="Maintain";
+
+run;
+
+
+data text_ready;
+set recommendation_data;
+
+length Customer_Review $150;
+length Sentiment_Category $20;
+
+if Churn_Risk="High Risk" then do;
+
+    Sentiment_Category="Negative";
+
+    if mod(_N_,5)=0 then
+        Customer_Review="Poor customer support experience";
+
+    else if mod(_N_,5)=1 then
+        Customer_Review="Mobile application frequently crashes";
+
+    else if mod(_N_,5)=2 then
+        Customer_Review="High annual fees with low benefits";
+
+    else if mod(_N_,5)=3 then
+        Customer_Review="Long waiting time from customer service";
+
+    else
+        Customer_Review="Limited rewards and promotions";
+
+end;
+
+else if Churn_Risk="Medium Risk" then do;
+
+    Sentiment_Category="Neutral";
+
+    if mod(_N_,5)=0 then
+        Customer_Review="Service quality is acceptable";
+
+    else if mod(_N_,5)=1 then
+        Customer_Review="Need more attractive rewards";
+
+    else if mod(_N_,5)=2 then
+        Customer_Review="Occasional application issues";
+
+    else if mod(_N_,5)=3 then
+        Customer_Review="Average customer service experience";
+
+    else
+        Customer_Review="Banking services meet expectations";
+
+end;
+
+else do;
+
+    Sentiment_Category="Positive";
+
+    if mod(_N_,5)=0 then
+        Customer_Review="Excellent customer support";
+
+    else if mod(_N_,5)=1 then
+        Customer_Review="Convenient mobile banking application";
+
+    else if mod(_N_,5)=2 then
+        Customer_Review="Fast and reliable transactions";
+
+    else if mod(_N_,5)=3 then
+        Customer_Review="Attractive cashback and rewards";
+
+    else
+        Customer_Review="Satisfied with overall banking services";
+
+end;
+
+run;
+
+
+
+data path_ready;
+set text_ready;
+
+length Journey_Stage_1 $30;
+length Journey_Stage_2 $30;
+length Journey_Stage_3 $30;
+length Journey_Outcome $30;
+
+if Attrition_Flag='Attrited Customer' then do;
+
+    Journey_Stage_1='Login';
+    Journey_Stage_2='Complaint';
+    Journey_Stage_3='Inactive';
+    Journey_Outcome='Churn';
+
+end;
+
+else if Churn_Risk='High Risk' then do;
+
+    Journey_Stage_1='Login';
+    Journey_Stage_2='Low Transaction';
+    Journey_Stage_3='Inactive';
+    Journey_Outcome='Potential Churn';
+
+end;
+
+else do;
+
+    Journey_Stage_1='Login';
+    Journey_Stage_2='Transaction';
+    Journey_Stage_3='Reward Usage';
+    Journey_Outcome='Retained';
+
+end;
+
+run;
+
+
+data bankchurn_lab_master;
+set path_ready;
+
+length Scenario_Action $50;
+length Expected_Impact $50;
+
+if Churn_Risk='High Risk' then do;
+
+    Scenario_Action='Retention Campaign';
+    Expected_Impact='Reduce Churn';
+    Estimated_Churn_Reduction=25;
+
+end;
+
+else if Churn_Risk='Medium Risk' then do;
+
+    Scenario_Action='Loyalty Program';
+    Expected_Impact='Improve Engagement';
+    Estimated_Churn_Reduction=15;
+
+end;
+
+else do;
+
+    Scenario_Action='Maintain Strategy';
+    Expected_Impact='Stable Revenue';
+    Estimated_Churn_Reduction=5;
+
+end;
+
+run;
+
+
+proc contents data=bankchurn_lab_master;
+run;
+
+proc print data=bankchurn_lab_master(obs=20);
+run;
+
+proc freq data=bankchurn_lab_master;
+tables
+Churn_Risk
+Sentiment_Category
+Recommendation
+Journey_Outcome
+Scenario_Action;
+run;
+
+
+proc export
+data=bankchurn_lab_master
+outfile="/home/u64450917/Advancebda/bankchurn_lab_master.csv"
+dbms=csv
+replace;
+run;
+
+
+
+
+
+
+
+
+
+title "Dataset Structure";
+
+proc contents
+data=bankchurn
+varnum;
+run;
+
+title "First 10 Records";
+
+proc print
+data=bankchurn(obs=10);
+run;
+
+title "Missing Value Analysis";
+
+proc means
+data=bankchurn
+n
+nmiss;
+run;
+
+proc sql;
+
+select
+count(*) as Total_Records
+from bankchurn;
+
+quit;
+
+
+proc sql;
+
+select
+count(distinct CLIENTNUM) as Unique_Customers
+from bankchurn;
+
+quit;
+
+
+proc sql;
+
+create table Data_Quality_Summary as
+
+select
+
+count(*) as Total_Records,
+
+count(distinct CLIENTNUM) as Unique_Customers,
+
+calculated Total_Records -
+calculated Unique_Customers as Duplicate_Records
+
+from bankchurn;
+
+quit;
+
+
+title "Data Quality Summary";
+
+proc print
+data=Data_Quality_Summary;
+run;
+
+title "Numerical Variable Summary";
+
+proc means
+data=bankchurn
+mean
+median
+min
+max
+std;
+
+var
+
+Customer_Age
+Credit_Limit
+Total_Revolving_Bal
+Total_Trans_Amt
+Total_Trans_Ct
+Avg_Utilization_Ratio;
+
+run;
+
+
+
+title "Categorical Variable Distribution";
+
+proc freq
+data=bankchurn;
+
+tables
+
+Attrition_Flag
+Gender
+Income_Category
+Card_Category
+Education_Level
+Marital_Status
+
+/ nocum;
+
+run;
+
+
+title "Outlier Detection";
+
+proc univariate
+data=bankchurn;
+
+var
+
+Credit_Limit
+Total_Trans_Amt
+Total_Trans_Ct
+Avg_Utilization_Ratio;
+
+histogram;
+
+run;
+
+title;
+
+data path_analysis;
+set bankchurn_lab_master;
+
+Transaction_ID=CLIENTNUM;
+
+Sequence_Order=1;
+Event=Journey_Stage_1;
+output;
+
+Sequence_Order=2;
+Event=Journey_Stage_2;
+output;
+
+Sequence_Order=3;
+Event=Journey_Stage_3;
+output;
+
+Sequence_Order=4;
+Event=Journey_Outcome;
+output;
+
+keep Transaction_ID Sequence_Order Event;
+run;
+
+proc export
+data=path_analysis
+outfile="/home/u64450917/Advancebda/path_analysis.csv"
+dbms=csv
+replace;
+run;
+
+
+
+
+%let n_iterations = 10000;
+%let high_risk_customers = 617;
+%let retention_mean = 0.55; 
+%let retention_std = 0.10; 
+
+data monte_carlo_results;
+    call streaminit(42);
+    do iteration = 1 to &n_iterations;
+        retention_prob = rand('Normal', &retention_mean, &retention_std);
+        if retention_prob < 0 then retention_prob = 0;
+        if retention_prob > 1 then retention_prob = 1;
+        retained_customers = round(&high_risk_customers * retention_prob);
+        output;
+    end;
+run;
+
+proc means data=monte_carlo_results
+    n mean std min p5 p25 p50 p75 p95 max;
+    var retained_customers retention_prob;
+    title "Monte Carlo Simulation Results - Customer Retention";
+run;
+
+proc sql;
+    create table scenario_summary as
+    select
+        min(retained_customers) as Worst_Case,
+        round(mean(retained_customers),1) as Most_Likely,
+        max(retained_customers) as Best_Case,
+        round(mean(retention_prob)*100,2) as Avg_Retention_Rate_Pct,
+        round(std(retained_customers),2) as Std_Dev
+    from monte_carlo_results;
+quit;
+
+title "Scenario Summary";
+proc print data=scenario_summary noobs;
+run;
+
+title "Distribution of Retained Customers (10,000 Iterations)";
+proc sgplot data=monte_carlo_results;
+    histogram retained_customers /
+        fillattrs=(color=steelblue)
+        transparency=0.3
+        binwidth=5;
+    density retained_customers / type=normal
+        lineattrs=(color=red thickness=2);
+    xaxis label="Number of Retained Customers";
+    yaxis label="Frequency";
+    refline 340 / axis=x lineattrs=(color=darkgreen pattern=dash)
+        label="Most Likely";
+run;
+title;
+
+proc export
+    data=monte_carlo_results
+    outfile="/home/u64450917/Advancebda/monte_carlo_results.csv"
+    dbms=csv
+    replace;
+run;
+
+proc export
+    data=scenario_summary
+    outfile="/home/u64450917/Advancebda/scenario_summary.csv"
+    dbms=csv
+    replace;
+run;
+
